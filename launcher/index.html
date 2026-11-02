@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>[hidden]{display:none!important}body{margin:0;font:14px system-ui}</style>
+</head>
+<body>
+<title>Dumpling Launcher</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+/* Layout: on a desktop, a 1:2 phone screen with short notes beside it; at phone width or with #kiosk,
+   the screen is the whole page. One dark world by choice, so there is no light theme. */
+:root {
+  --void: #04060c;          /* the blue-black behind the mesh */
+  --ink: #e9ecf2;
+  --dim: #8e98aa;
+  --ember: #f39200;         /* the saver's C_ORANGE */
+  --ember-hot: #ffc977;
+  --glass: rgb(9 12 21 / .66);
+  --line: rgb(233 236 242 / .14);
+  --f-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--void); color: var(--ink); font-family: var(--f-body); overflow: hidden;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+#stage { height: 100%; display: grid; grid-template-columns: auto minmax(0, 340px); gap: 56px;
+  align-items: center; justify-content: center; padding-block: 24px; box-sizing: border-box; }
+
+#screen { position: relative; height: min(88vh, 840px); aspect-ratio: 1 / 2; max-width: 100%;
+  border-radius: 34px; overflow: hidden; background: var(--void);
+  box-shadow: 0 0 0 1px var(--line), 0 0 0 9px #0b0e16, 0 0 0 10px var(--line), 0 40px 120px rgb(0 0 0 / .7);
+  touch-action: none; user-select: none; -webkit-user-select: none; }
+#wall { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#ui { position: absolute; inset: 0; }
+
+/* the orb: the only control, and only after a tap */
+#orb { position: absolute; left: 0; top: 0; width: 68px; height: 68px; margin: -34px 0 0 -34px; border-radius: 50%;
+  opacity: 0; transform: translate(var(--x), var(--y)) scale(.4); pointer-events: none;
+  transition: opacity .28s ease, transform .34s cubic-bezier(.2, .9, .25, 1.2);
+  background: radial-gradient(circle at 50% 50%, rgb(255 201 119 / .95) 0 9%, rgb(243 146 0 / .55) 24%, rgb(243 146 0 / .08) 58%, transparent 70%);
+  box-shadow: 0 0 0 1.5px rgb(255 201 119 / .75), 0 0 28px rgb(243 146 0 / .45), inset 0 0 18px rgb(243 146 0 / .35); }
+#orb::after { content: ""; position: absolute; inset: -10px; border-radius: 50%; border: 1px solid rgb(255 201 119 / .35);
+  animation: breathe 2.8s ease-in-out infinite; }
+#orb.on { opacity: 1; transform: translate(var(--x), var(--y)) scale(1); pointer-events: auto; }
+#orb.held { transform: translate(var(--x), var(--y)) scale(.86); }
+@keyframes breathe { 0%, 100% { transform: scale(.92); opacity: .25; } 50% { transform: scale(1.12); opacity: .7; } }
+
+#trail { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+#trail line { stroke: var(--ember-hot); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 7; opacity: 0; transition: opacity .15s; }
+#trail.on line { opacity: .75; }
+
+.petal { position: absolute; left: 0; top: 0; width: 64px; margin: -32px 0 0 -32px; padding: 0; border: 0; background: none;
+  color: var(--ink); display: grid; justify-items: center; gap: 7px; font: inherit; cursor: pointer;
+  opacity: 0; pointer-events: none; transform: translate(var(--ox), var(--oy)) scale(.3);
+  transition: opacity .2s ease, transform .32s cubic-bezier(.2, .9, .25, 1.15); transition-delay: var(--d, 0s); }
+.petal .disc { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--glass); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 0 0 1px rgb(255 201 119 / .32); transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
+.petal svg { width: 26px; height: 26px; stroke: var(--ember-hot); stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.petal .lbl { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); white-space: nowrap;
+  text-shadow: 0 1px 6px var(--void); transition: color .16s; }
+.open .petal { opacity: 1; pointer-events: auto; transform: translate(var(--px), var(--py)) scale(1); }
+.petal.sel .disc { transform: scale(1.2); background: rgb(243 146 0 / .3); box-shadow: 0 0 0 1.5px var(--ember-hot), 0 0 26px rgb(243 146 0 / .6); }
+.petal.sel .lbl { color: var(--ink); }
+.petal:focus-visible { outline: none; }
+.petal:focus-visible .disc { box-shadow: 0 0 0 2px var(--ink); }
+
+/* an app, full screen over the wallpaper */
+#app { position: absolute; inset: 0; display: grid; grid-template-rows: 1fr auto; background: rgb(4 6 12 / .78);
+  backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  opacity: 0; transform: scale(.18); transform-origin: var(--ax, 50%) var(--ay, 50%); pointer-events: none;
+  transition: opacity .3s ease, transform .42s cubic-bezier(.16, .84, .3, 1); }
+#app.on { opacity: 1; transform: scale(1); pointer-events: auto; }
+#appBody { display: grid; align-content: center; justify-items: center; gap: 14px; text-align: center;
+  padding: max(28px, env(safe-area-inset-top, 0px)) 28px 0; min-width: 0; }
+#appBody .big svg { width: 52px; height: 52px; stroke: var(--ember-hot); stroke-width: 1.3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+#appBody h2 { margin: 0; font: 600 26px/1.1 var(--f-display); letter-spacing: .02em; text-wrap: balance; }
+#appBody p { margin: 0; max-width: 30ch; color: var(--dim); font-size: 14px; line-height: 1.5; }
+#appBody code { font: 12px var(--f-mono); color: var(--ember-hot); overflow-wrap: anywhere; }
+#clock { font: 500 clamp(56px, 22vw, 96px)/1 var(--f-display); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+#clockDate { color: var(--dim); font-size: 15px; letter-spacing: .08em; text-transform: uppercase; }
+#home { display: grid; justify-items: center; gap: 8px; padding: 18px 0 max(14px, env(safe-area-inset-bottom, 0px)); touch-action: none; cursor: grab; }
+#home .bar { width: 120px; height: 5px; border-radius: 3px; background: rgb(233 236 242 / .55); }
+#home span { font-size: 11px; color: var(--dim); letter-spacing: .06em; text-transform: uppercase; }
+
+#hint { position: absolute; left: 0; right: 0; bottom: calc(30px + env(safe-area-inset-bottom, 0px)); text-align: center;
+  font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: rgb(233 236 242 / .55);
+  pointer-events: none; transition: opacity .6s; }
+#hint.gone { opacity: 0; }
+#vid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; background: var(--void); }
+/* the tap ripple when the wallpaper is the pre-rendered video (the shader draws its own) */
+.rip { position: absolute; left: 0; top: 0; width: 24px; height: 24px; margin: -12px 0 0 -12px; border-radius: 50%;
+  border: 1.5px solid rgb(255 201 119 / .8); box-shadow: 0 0 14px rgb(243 146 0 / .55), inset 0 0 10px rgb(243 146 0 / .35);
+  pointer-events: none; transform: translate(var(--x), var(--y)) scale(1); animation: rip 1.2s cubic-bezier(.2, .7, .3, 1) forwards; }
+@keyframes rip { to { transform: translate(var(--x), var(--y)) scale(14); opacity: 0; } }
+#nogl { position: absolute; inset: 0; display: grid; place-items: center; padding: 32px; text-align: center; color: var(--dim);
+  background: radial-gradient(120% 70% at 50% 40%, rgb(243 146 0 / .16), transparent 60%), var(--void); }
+
+/* notes beside the screen (desktop only) */
+#notes { display: grid; gap: 22px; align-content: center; min-width: 0; }
+#notes h1 { margin: 0; font: 600 34px/1.05 var(--f-display); letter-spacing: .01em; text-wrap: balance; }
+#notes h1 small { display: block; margin-top: 8px; font: 400 14px/1.4 var(--f-body); color: var(--dim); letter-spacing: 0; }
+#notes h3 { margin: 0 0 8px; font: 500 11px/1 var(--f-body); letter-spacing: .14em; text-transform: uppercase; color: var(--ember); }
+#notes ol, #notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--ink); font-size: 14px; line-height: 1.45; }
+#notes ul { list-style: none; padding: 0; }
+#notes li b { font-weight: 500; }
+#notes .url { font: 12px var(--f-mono); color: var(--dim); overflow-wrap: anywhere; }
+#notes .todo { color: var(--ember-hot); }
+#stats { font: 12px var(--f-mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* phone width, or running on the phone itself: the screen is the page */
+@media (max-width: 760px) {
+  body { padding: 0; }
+  #stage { display: block; padding: 0; }
+  #notes { display: none; }
+  #screen { position: fixed; inset: 0; height: auto; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+}
+.kiosk body { padding: 0; cursor: none; }
+.kiosk #stage { display: block; padding: 0; }
+.kiosk #notes, .kiosk #hint { display: none; }
+.kiosk #screen { position: fixed; inset: 0; height: auto; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  #orb::after { animation: none; }
+  #orb, .petal, #app { transition-duration: .01s; }
+}
+</style>
+
+<div id="stage">
+  <div id="screen">
+    <video id="vid" muted loop playsinline preload="auto" hidden aria-hidden="true"></video>
+    <canvas id="wall" aria-label="Living wallpaper: an orange jellyfish mesh drifting over stars"></canvas>
+    <div id="ui">
+      <svg id="trail" aria-hidden="true"><line id="trailLine" x1="0" y1="0" x2="0" y2="0"></line></svg>
+      <div id="ring"></div>
+      <div id="orb" role="button" aria-label="Apps"></div>
+      <div id="hint">Tap anywhere</div>
+      <section id="app" aria-live="polite">
+        <div id="appBody"></div>
+        <div id="home" aria-label="Swipe up to go home"><div class="bar"></div><span>Swipe up to go home</span></div>
+      </section>
+    </div>
+  </div>
+
+  <aside id="notes">
+    <h1>Dumpling Launcher<small>Home screen prototype for the OnePlus 5T running postmarketOS. The same file runs full screen on the phone.</small></h1>
+    <div>
+      <h3>How it works</h3>
+      <ol>
+        <li>The wallpaper has no buttons. <b>Tap anywhere</b> and an orb appears there.</li>
+        <li><b>Press the orb and swipe</b> towards an app. Let go to open it. A tap on the orb leaves the ring open for tapping instead.</li>
+        <li>In an app, <b>swipe up from the bottom edge</b> to go home.</li>
+      </ol>
+    </div>
+    <div>
+      <h3>Apps on the ring</h3>
+      <ul id="appList"></ul>
+    </div>
+    <div id="stats">starting…</div>
+  </aside>
+</div>
+
+<script type="x-shader/x-fragment" id="frag">#version 300 es
+precision highp float;
+precision highp int;
+// The orange synaptic mesh from the ISE 2027 saver (neural.frag), lifted out on its own: two Voronoi sheets
+// that drift, turn and pulse like a jellyfish bell over a far star field. No logo, no fibres.
+uniform vec2  uRes;
+uniform float uTime;
+uniform uint  uSeed;
+uniform vec3  uTap;    // last tap: xy in short-side units (centred, y up), z = when it happened
+uniform float uHold;   // 0..1 while the orb is held: the bell draws in
+uniform float uLite;   // 1 when drawing in software: one mesh sheet instead of two
+out vec4 fragColor;
+
+const vec3 C_BLUE   = vec3(80.0, 200.0, 240.0) / 255.0;
+const vec3 C_GREEN  = vec3(30.0, 195.0, 80.0) / 255.0;
+const vec3 C_ORANGE = vec3(243.0, 146.0, 0.0) / 255.0;
+vec3 L(vec3 c) { return pow(c, vec3(2.2)); }
+
+uint pcg(uint v) {
+    uint s = v * 747796405u + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+float rnd(uint a, uint b, uint k) { return float(pcg(a ^ pcg(b * 0x9E3779B9u + k * 0x85EBCA6Bu + uSeed))) / 4294967295.0; }
+float hash1(float x) { return rnd(uint(int(floor(x)) + 1000000), 17u, 3u); }
+float hash2(vec2 p) { ivec2 i = ivec2(floor(p)) + 100000; return rnd(uint(i.x), uint(i.y), 5u); }
+float vnoise2(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash2(i), hash2(i + vec2(1, 0)), f.x), mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), f.x), f.y);
+}
+
+vec2 cellPoint(vec2 c, float layer, float t) {
+    vec2 h = vec2(hash2(c + layer * 31.7), hash2(c + layer * 31.7 + 113.1));
+    vec2 w = vec2(sin(t * (0.25 + 0.35 * h.y) + h.x * 6.283), cos(t * (0.2 + 0.3 * h.x) + h.y * 6.283));
+    return c + 0.5 + 0.3 * (h - 0.5) + 0.25 * w;
+}
+vec4 voronoi(vec2 q, float layer, float t) {
+    vec2 c = floor(q);
+    float f1 = 9.0, f2 = 9.0, f3 = 9.0; vec2 id = vec2(0.0), id2 = vec2(0.0), id3 = vec2(0.0);
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+        vec2 g = c + vec2(i, j);
+        float d = length(q - cellPoint(g, layer, t));
+        if (d < f1) { f3 = f2; id3 = id2; f2 = f1; id2 = id; f1 = d; id = g; }
+        else if (d < f2) { f3 = f2; id3 = id2; f2 = d; id2 = g; }
+        else if (d < f3) { f3 = d; id3 = g; }
+    }
+    return vec4(f2 - f1, f3 - f1, hash2(id + layer * 7.0), hash2(id + id2 + id3 + layer * 3.0));
+}
+vec3 mesh(vec2 p, float t, float px, float scale, float layer, float bright, out float cover) {
+    cover = 0.0;
+    vec2 ctr = vec2(0.35 * sin(t * 0.031 + layer * 2.0), 0.08 * sin(t * 0.047 + layer));
+    float ang = 0.5 * sin(t * 0.05 + layer * 1.7) + 0.2 * sin(t * 0.13 + layer);
+    float ph = fract(t * 0.11 + layer * 0.37);
+    float pulse = ph < 0.2 ? smoothstep(0.0, 0.2, ph) : 1.0 - smoothstep(0.2, 1.0, ph);
+    vec2 r = p - ctr;
+    float rr = length(r);
+    r *= 1.0 + (0.14 * pulse + 0.22 * uHold) * exp(-rr * 2.0) + 0.025 * sin(rr * 11.0 - t * 1.4);
+    float ca = cos(ang), sa = sin(ang);
+    r = vec2(ca * r.x - sa * r.y, sa * r.x + ca * r.y);
+    float sheetY = -0.02 + 0.22 * sin(1.1 * r.x + 2.4 + layer * 1.3 + t * 0.05) + 0.05 * sin(3.0 * r.x - t * 0.6) + 0.08 * layer;
+    float bz = (r.y - sheetY) / (0.17 + 0.05 * layer + 0.04 * pulse);
+    float band = exp(-bz * bz);
+    vec2 flow = vec2(t * 0.05, -t * 0.04);
+    float clouds = smoothstep(0.5, 0.82, vnoise2(r * 2.6 + flow + layer * 17.0));
+    float m = band * clouds + 0.6 * smoothstep(0.74, 0.92, vnoise2(r * 1.7 - flow * 0.7 + 60.0 + layer * 9.0));
+    m *= 0.6 + 0.8 * vnoise2(r * 7.0 + layer * 5.0 + t * 0.08);
+    cover = clamp(m * 1.5, 0.0, 1.0);
+    if (m < 0.01) return vec3(0.0);
+    vec2 q = r * scale
+           + 0.6 * vec2(vnoise2(r * 2.5 + t * 0.12), vnoise2(r * 2.5 + 9.0 - t * 0.10))
+           + 0.3 * vec2(vnoise2(r * 6.0 + 3.0 + t * 0.2), vnoise2(r * 6.0 + 7.0 - t * 0.2));
+    vec4 v = voronoi(q, layer, t);
+    float pxs = px * scale;
+    float edge = 1.0 - smoothstep(0.0, 1.6 * pxs + 0.012, v.x);
+    float node = exp(-v.y * v.y / (0.0025 + 6.0 * pxs * pxs)) * (0.4 + 0.6 * step(0.5, v.w));
+    float flashT = t * (0.3 + 0.5 * v.w) + v.w * 17.0;
+    float flash = pow(max(0.0, sin(flashT * 3.14159)), 40.0) * step(0.75, hash1(floor(flashT) + v.w * 300.0));
+    vec3 c = L(C_ORANGE);
+    return m * m * bright * 1.8 * (1.0 + 0.25 * pulse) * (c * edge * 0.7 + mix(c, vec3(1.0, 0.8, 0.45), 0.4) * node * (1.4 + 6.0 * flash));
+}
+vec3 dust(vec2 p, float t, float px) {
+    vec3 col = vec3(0.0);
+    for (int l = 0; l < 3; l++) {
+        float sc = 120.0 + 90.0 * float(l);
+        vec2 q = p * sc + vec2(t * (0.15 + 0.1 * float(l)), 0.0);
+        vec2 c = floor(q);
+        float h = hash2(c + float(l) * 41.0);
+        if (h < 0.982) continue;
+        vec2 sp = c + 0.5 + 0.35 * vec2(hash2(c + 3.0) - 0.5, hash2(c + 7.0) - 0.5);
+        float r = length(q - sp) / sc;
+        float tw = 0.5 + 0.5 * sin(t * (1.0 + 3.0 * hash2(c + 11.0)) + h * 60.0);
+        float pick = hash2(c + 19.0);
+        vec3 c3 = pick < 0.4 ? C_BLUE : (pick < 0.7 ? C_GREEN : (pick < 0.9 ? C_ORANGE : vec3(0.9)));
+        col += L(c3) * (h - 0.982) * 35.0 * tw * exp(-r * r / (px * px * 2.0));
+    }
+    return col;
+}
+void main() {
+    float shortSide = min(uRes.x, uRes.y);
+    vec2 p = (gl_FragCoord.xy - 0.5 * uRes) / shortSide;
+    float px = 1.0 / shortSide;
+    float t = uTime;
+    // a tap sends a ring out through the membrane
+    vec2 dv = p - uTap.xy; float dl = length(dv); float age = t - uTap.z;
+    float env = age > 0.0 ? exp(-age * 1.1) : 0.0;
+    p += (dv / max(dl, 1e-4)) * 0.03 * env * exp(-pow((dl - age * 0.55) / 0.07, 2.0));
+    // portrait: turn the world so the sheets run along the long side of the phone
+    vec2 f = uRes.x >= uRes.y ? p : vec2(p.y, -p.x);
+    float cover0, cover1 = 0.0;
+    vec3 near = mesh(f, t, px, 16.0, 0.0, 0.9, cover0);
+    vec3 far  = uLite > 0.5 ? vec3(0.0) : mesh(f, t, px, 30.0, 1.0, 0.4, cover1);   // lite: one sheet
+    float veil = clamp(cover0 + 0.6 * cover1, 0.0, 1.0);
+    vec3 col = L(vec3(0.004, 0.006, 0.014));
+    col += dust(f, t, px) * (1.0 - 0.85 * veil);
+    col += far + near;
+    col = 1.0 - exp(-col * 1.1);
+    fragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
+}
+</script>
+
+<script>
+// ---------------------------------------------------------------------------------------------- settings
+// Edit this block on the phone (~/launcher/index.html). url: a web app opened full screen by the phone's
+// shell. exec: a native app the shell starts. builtin: drawn by this page.
+const CONFIG = {
+  renderScale: 0.6,     // wallpaper resolution vs the screen; the Adreno 540 needs headroom
+  fps: 30,              // cap, to keep the phone cool on the charger
+  soft: { renderScale: 0.28, fps: 24 },   // used instead when the wallpaper is drawn in software (no GPU)
+  video: "jellyfish-loop.mp4",            // with no GPU, play this pre-rendered loop instead (falls back to the shader if missing)
+  forceVideo: location.hash === "#kiosk", // on the phone: WebKit hides the real GPU name, so software drawing can't be detected
+  orbTimeoutMs: 4500,   // the orb fades if nothing happens
+  seed: 0,
+  apps: [
+    { name: "Home Assistant", icon: "home",  url: "http://192.168.68.23:8123" },
+    { name: "Uptime Kuma",    icon: "pulse", url: "" },
+    { name: "Homarr",         icon: "grid",  url: "" },
+    { name: "Immich",         icon: "photo", url: "" },
+    { name: "Clock",          icon: "clock", builtin: "clock" },
+    { name: "Terminal",       icon: "term",  exec: "foot" },
+  ],
+};
+
+const ICONS = {
+  home:  '<path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/><path d="M10 19v-5h4v5"/>',
+  pulse: '<path d="M3 12h4l2-5 4 10 2-5h6"/>',
+  grid:  '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
+  photo: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><circle cx="9" cy="10.5" r="1.8"/><path d="m20.5 16-5-5-8 8"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  term:  '<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="m7.5 10 3 2.5-3 2.5"/><path d="M13 15.5h4"/>',
+};
+const svg = (k) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[k] || ICONS.grid}</svg>`;
+
+const $ = (s) => document.querySelector(s);
+if (location.hash === "#kiosk") document.documentElement.classList.add("kiosk");
+const screenEl = $("#screen"), cv = $("#wall"), ui = $("#ui"), orb = $("#orb"), ring = $("#ring");
+const trail = $("#trail"), trailLine = $("#trailLine"), app = $("#app"), appBody = $("#appBody"), hint = $("#hint");
+const shell = window.webkit?.messageHandlers?.shell;   // present only inside the phone's kiosk shell
+
+// ---------------------------------------------------------------------------------------------- wallpaper
+const T0 = performance.now() - 40000;                // start 40 s in, so the bell is already moving
+const motion = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0.35 : 1;
+const now = () => (performance.now() - T0) / 1000 * motion;
+const tap = { x: 9, y: 9, t: -99 };
+let hold = 0, holdTarget = 0;
+
+const gl = cv.getContext("webgl2", { antialias: false, alpha: false, depth: false, powerPreference: "low-power" });
+let prog, U = {};
+function initGL() {
+  const vs = `#version 300 es\nvoid main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.0-1.0,0.0,1.0);}`;
+  const mk = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  prog = gl.createProgram();
+  gl.attachShader(prog, mk(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, $("#frag").textContent));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  for (const n of ["uRes", "uTime", "uSeed", "uTap", "uHold", "uLite"]) U[n] = gl.getUniformLocation(prog, n);
+  gl.bindVertexArray(gl.createVertexArray());
+  // drawn in software (no GPU)? then go lighter: lower resolution, one mesh sheet
+  let r = "";
+  try { const x = gl.getExtension("WEBGL_debug_renderer_info"); r = String(gl.getParameter(x ? x.UNMASKED_RENDERER_WEBGL : gl.RENDERER)); } catch (e) {}
+  soft = /llvmpipe|softpipe|swiftshader/i.test(r);
+  if (soft) { CONFIG.renderScale = CONFIG.soft.renderScale; CONFIG.fps = CONFIG.soft.fps; }
+  console.log("RENDERER", r || "unknown", soft ? "(software: lite mode)" : "");
+}
+let soft = false;
+function fail(msg) {
+  const d = document.createElement("div"); d.id = "nogl";
+  d.textContent = "The wallpaper needs WebGL 2. " + msg; screenEl.insertBefore(d, ui);
+}
+let glOK = false;
+try { if (!gl) throw new Error("This browser did not provide it."); initGL(); glOK = true; } catch (e) { fail(e.message); }
+
+function resize() {
+  const r = screenEl.getBoundingClientRect();
+  const k = Math.min(devicePixelRatio || 1, 2) * CONFIG.renderScale;
+  const w = Math.max(2, Math.round(r.width * k)), h = Math.max(2, Math.round(r.height * k));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+}
+let last = 0, frames = 0, fpsShown = 0, fpsT = performance.now();
+let videoMode = false;
+function frame(ms) {
+  if (videoMode) return;                              // the video has taken over: stop drawing the shader
+  requestAnimationFrame(frame);
+  if (document.hidden || ms - last < 1000 / CONFIG.fps - 2) return;
+  last = ms;
+  hold += (holdTarget - hold) * 0.12;
+  resize();
+  gl.viewport(0, 0, cv.width, cv.height);
+  gl.useProgram(prog);
+  gl.uniform2f(U.uRes, cv.width, cv.height);
+  gl.uniform1f(U.uTime, now());
+  gl.uniform1ui(U.uSeed, CONFIG.seed >>> 0);
+  gl.uniform3f(U.uTap, tap.x, tap.y, tap.t);
+  gl.uniform1f(U.uHold, hold);
+  gl.uniform1f(U.uLite, soft ? 1 : 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  frames++;
+  if (ms - fpsT > 1000) { fpsShown = Math.round(frames * 1000 / (ms - fpsT)); frames = 0; fpsT = ms; stats(); }
+}
+let statN = 0;
+function stats() {
+  const line = `wallpaper ${cv.width}×${cv.height} px · ${fpsShown} fps (cap ${CONFIG.fps})`;
+  const s = $("#stats"); if (s) s.textContent = line;
+  if (location.hash === "#kiosk" && ++statN % 10 === 0) console.log("FPS", line);   // into the phone's launcher log
+}
+if (glOK) requestAnimationFrame(frame);
+
+// no GPU: the shader is too heavy for the CPU, so play the same wallpaper pre-rendered as a loop
+function startVideo() {
+  const v = $("#vid");
+  v.addEventListener("playing", () => { videoMode = true; v.hidden = false; cv.hidden = true; console.log("WALLPAPER video", CONFIG.video); }, { once: true });
+  v.addEventListener("error", () => console.log("WALLPAPER video failed to play, keeping the shader:", v.error && v.error.message), { once: true });
+  v.src = CONFIG.video; v.muted = true; v.loop = true;
+  v.play().catch((e) => console.log("WALLPAPER video play() refused:", e && e.message));
+}
+if ((soft || !glOK || CONFIG.forceVideo) && CONFIG.video) startVideo();
+
+// screen px (CSS, top-left) → the shader's centred, y-up, short-side units
+function toP(x, y) { const w = screenEl.clientWidth, h = screenEl.clientHeight, s = Math.min(w, h);
+  return { x: (x - w / 2) / s, y: (h / 2 - y) / s }; }
+function ripple(x, y) {
+  const p = toP(x, y); tap.x = p.x; tap.y = p.y; tap.t = now();
+  if (videoMode) {
+    const r = document.createElement("div"); r.className = "rip";
+    r.style.setProperty("--x", `${x}px`); r.style.setProperty("--y", `${y}px`);
+    ui.prepend(r); r.addEventListener("animationend", () => r.remove());
+  }
+}
+
+// ---------------------------------------------------------------------------------------------- ring of apps
+const petals = CONFIG.apps.map((a, i) => {
+  const b = document.createElement("button");
+  b.className = "petal"; b.type = "button"; b.dataset.i = i;
+  b.innerHTML = `<span class="disc">${svg(a.icon)}</span><span class="lbl">${a.name}</span>`;
+  b.style.setProperty("--d", `${i * 0.025}s`);
+  ring.appendChild(b); return b;
+});
+const list = $("#appList");
+CONFIG.apps.forEach((a) => {
+  const li = document.createElement("li");
+  const where = a.url ? `<span class="url">${a.url}</span>` : a.exec ? `<span class="url">runs ${a.exec}</span>`
+    : a.builtin ? `<span class="url">built in</span>` : `<span class="url todo">address to add</span>`;
+  li.innerHTML = `<b>${a.name}</b> ${where}`; list.appendChild(li);
+});
+
+const S = { mode: "idle", cx: 0, cy: 0, R: 120, sel: -1, drag: null, down: null, timer: 0 };
+const N = CONFIG.apps.length;
+
+function local(e) { const r = screenEl.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+function petalPos(i) { const a = -Math.PI / 2 + i * 2 * Math.PI / N; return { x: S.cx + S.R * Math.cos(a), y: S.cy + S.R * Math.sin(a) }; }
+
+function placeOrb(x, y) {
+  const w = screenEl.clientWidth, h = screenEl.clientHeight;
+  S.R = Math.max(96, Math.min(150, Math.min(w, h) * 0.29));
+  const mx = Math.min(w / 2, S.R + 46), my = Math.min(h / 2, S.R + 58);   // room for the ring and its labels
+  S.cx = Math.min(Math.max(x, mx), w - mx); S.cy = Math.min(Math.max(y, my), h - my);
+  for (const el of [orb, ...petals]) { el.style.setProperty("--x", `${S.cx}px`); el.style.setProperty("--y", `${S.cy}px`); }
+  petals.forEach((b, i) => { const p = petalPos(i);
+    b.style.setProperty("--ox", `${S.cx}px`); b.style.setProperty("--oy", `${S.cy}px`);
+    b.style.setProperty("--px", `${p.x}px`); b.style.setProperty("--py", `${p.y}px`); });
+}
+function arm(ms) { clearTimeout(S.timer); S.timer = setTimeout(() => { if (S.mode === "orb" || S.mode === "menu") hideOrb(); }, ms); }
+function showOrb(x, y) {
+  hint.classList.add("gone");
+  placeOrb(x, y); closeMenu(true);
+  orb.classList.add("on"); S.mode = "orb"; arm(CONFIG.orbTimeoutMs);
+}
+function hideOrb() { closeMenu(true); orb.classList.remove("on"); S.mode = "idle"; }
+function openMenu() { ring.classList.add("open"); S.mode = "menu"; arm(CONFIG.orbTimeoutMs + 2000); }
+function closeMenu(quiet) {
+  ring.classList.remove("open"); select(-1); trail.classList.remove("on"); orb.classList.remove("held");
+  holdTarget = 0; if (!quiet && S.mode === "menu") { S.mode = "orb"; arm(CONFIG.orbTimeoutMs); }
+}
+function select(i) { if (i === S.sel) return; if (S.sel >= 0) petals[S.sel].classList.remove("sel"); S.sel = i; if (i >= 0) petals[i].classList.add("sel"); }
+
+function launch(i) {
+  const a = CONFIG.apps[i], p = petalPos(i);
+  ripple(p.x, p.y);
+  hideOrb();
+  if (shell && (a.url || a.exec)) { shell.postMessage(JSON.stringify(a.exec ? { exec: a.exec } : { open: a.url })); return; }
+  openApp(a, p);
+}
+
+// ---------------------------------------------------------------------------------------------- apps
+let clockTick = 0;
+function openApp(a, from) {
+  clearInterval(clockTick);
+  if (a.builtin === "clock") {
+    appBody.innerHTML = `<div id="clock">--:--</div><div id="clockDate"></div>`;
+    const tick = () => { const d = new Date();
+      $("#clock").textContent = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+      $("#clockDate").textContent = d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }); };
+    tick(); clockTick = setInterval(tick, 1000);
+  } else {
+    const what = a.exec ? `On the phone this starts <code>${a.exec}</code> full screen. Close it to come back.`
+      : a.url ? `On the phone this opens <code>${a.url}</code> full screen.`
+      : `On the phone this will open ${a.name} full screen. Add its address to the apps list at the top of index.html.`;
+    appBody.innerHTML = `<div class="big">${svg(a.icon)}</div><h2>${a.name}</h2><p>${what}</p>`;
+  }
+  app.style.setProperty("--ax", `${from.x}px`); app.style.setProperty("--ay", `${from.y}px`);
+  S.mode = "app"; app.classList.add("on");
+}
+function goHome() { clearInterval(clockTick); app.classList.remove("on"); S.mode = "idle"; }
+window.launcher = { home: goHome };   // the kiosk shell calls this when it brings the wallpaper back
+
+// ---------------------------------------------------------------------------------------------- input
+// One set of handlers fed by pointer events (desktop browsers) or touch events (WebKit on the phone sends
+// touch events and emulated mouse clicks, never pointer events). Touch wins when both arrive.
+let touchAt = -1e9;
+const isTouchPtr = (e) => e.pointerType === "touch" || e.timeStamp - touchAt < 800;
+
+// swipe up from the bottom edge, inside an app
+const home = $("#home"); let swipe = null;
+const homeDown = (y) => { swipe = { y }; };
+const homeMove = (y) => { if (swipe && swipe.y - y > 56) { swipe = null; goHome(); } };
+home.addEventListener("pointerdown", (e) => { if (isTouchPtr(e)) return; homeDown(e.clientY); home.setPointerCapture(e.pointerId); });
+home.addEventListener("pointermove", (e) => { if (!isTouchPtr(e)) homeMove(e.clientY); });
+home.addEventListener("pointerup", () => { swipe = null; });
+home.addEventListener("touchstart", (e) => { touchAt = e.timeStamp; e.preventDefault(); homeDown(e.changedTouches[0].clientY); }, { passive: false });
+home.addEventListener("touchmove", (e) => { e.preventDefault(); homeMove(e.changedTouches[0].clientY); }, { passive: false });
+home.addEventListener("touchend", () => { swipe = null; });
+
+// the wallpaper, the orb and the ring
+function onDown(p, target, ts) {
+  if (S.mode === "app") return false;
+  const pi = target?.closest?.(".petal");
+  if (S.mode === "menu" && !S.drag) {                 // ring left open by a tap on the orb
+    if (pi) { launch(+pi.dataset.i); return false; }
+    if (target === orb) { closeMenu(); return false; }
+    S.down = { ...p, t: ts }; return false;           // a tap elsewhere moves the orb there
+  }
+  if (S.mode === "orb" && target === orb) {
+    S.drag = { moved: false }; openMenu(); orb.classList.add("held"); holdTarget = 1;
+    trailLine.setAttribute("x1", S.cx); trailLine.setAttribute("y1", S.cy);
+    trailLine.setAttribute("x2", S.cx); trailLine.setAttribute("y2", S.cy);
+    return true;                                      // capture the drag
+  }
+  S.down = { ...p, t: ts }; return false;
+}
+function onMove(p) {
+  if (!S.drag) return;
+  const dx = p.x - S.cx, dy = p.y - S.cy, d = Math.hypot(dx, dy);
+  if (d > 10) { S.drag.moved = true; trail.classList.add("on"); }
+  trailLine.setAttribute("x2", p.x); trailLine.setAttribute("y2", p.y);
+  if (d < S.R * 0.34) { select(-1); return; }
+  let a = Math.atan2(dy, dx) + Math.PI / 2; if (a < 0) a += 2 * Math.PI;
+  select(Math.round(a / (2 * Math.PI / N)) % N);
+}
+function onUp(p, ts) {
+  if (S.drag) {
+    const moved = S.drag.moved, sel = S.sel; S.drag = null;
+    orb.classList.remove("held"); holdTarget = 0; trail.classList.remove("on");
+    if (sel >= 0) launch(sel);
+    else if (!moved) { arm(CONFIG.orbTimeoutMs + 3000); }   // tapped the orb: the ring stays open for tapping
+    else closeMenu();
+    return;
+  }
+  if (S.down) {
+    // event timestamps, not the clock now: a busy phone can hand us the events late
+    const quick = ts - S.down.t < 700, still = Math.hypot(p.x - S.down.x, p.y - S.down.y) < 24;
+    S.down = null;
+    if (quick && still) { ripple(p.x, p.y); showOrb(p.x, p.y); }
+  }
+}
+function onCancel() { S.drag = null; S.down = null; closeMenu(); }
+
+ui.addEventListener("pointerdown", (e) => { if (isTouchPtr(e)) return; if (onDown(local(e), e.target, e.timeStamp)) ui.setPointerCapture(e.pointerId); });
+ui.addEventListener("pointermove", (e) => { if (!isTouchPtr(e)) onMove(local(e)); });
+ui.addEventListener("pointerup", (e) => { if (!isTouchPtr(e)) onUp(local(e), e.timeStamp); });
+ui.addEventListener("pointercancel", (e) => { if (!isTouchPtr(e)) onCancel(); });
+ui.addEventListener("touchstart", (e) => {
+  touchAt = e.timeStamp;
+  if (S.mode === "app") return;                       // let the app panel's own touches through
+  e.preventDefault();                                 // no emulated mouse clicks, no scrolling
+  const t = e.changedTouches[0]; onDown(local(t), e.target, e.timeStamp);
+}, { passive: false });
+ui.addEventListener("touchmove", (e) => { if (S.mode === "app") return; e.preventDefault(); onMove(local(e.changedTouches[0])); }, { passive: false });
+ui.addEventListener("touchend", (e) => { touchAt = e.timeStamp; if (S.mode === "app") return; e.preventDefault(); onUp(local(e.changedTouches[0]), e.timeStamp); }, { passive: false });
+ui.addEventListener("touchcancel", () => onCancel());
+addEventListener("contextmenu", (e) => e.preventDefault());   // no long-press Back/Forward menu
+addEventListener("keydown", (e) => { if (e.key === "Escape") { if (S.mode === "app") goHome(); else hideOrb(); } });
+addEventListener("resize", () => { if (S.mode !== "idle" && S.mode !== "app") placeOrb(S.cx, S.cy); });
+</script>
+
+</body>
+</html>

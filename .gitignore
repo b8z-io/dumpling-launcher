@@ -1,0 +1,11 @@
+# render working files
+render/render.html
+render/r.html
+render/frames/
+render/out/
+# postmarketOS build output and local secrets
+out/
+postmarketos/*.pub
+postmarketos/tailscale-authkey
+__pycache__/
+.DS_Store

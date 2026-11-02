@@ -1,0 +1,27 @@
+#!/sbin/openrc-run
+# /etc/init.d/dumpling-launcher: the jellyfish launcher, full screen in cage, started at boot.
+# Everything draws in software: GPU drawing freezes the msm display driver on this phone (Nov 2026).
+# The launcher runs at low priority on at most 4 cores, so the phone's own services always get CPU time.
+name="Dumpling launcher"
+description="Living-wallpaper launcher in a cage kiosk"
+_user=user
+_run=/run/dumpling          # not /run/user/<uid>: every SSH login wipes that
+supervisor=supervise-daemon
+command=/usr/bin/env
+command_args="XDG_RUNTIME_DIR=$_run LIBSEAT_BACKEND=seatd WLR_RENDERER=pixman /usr/bin/dbus-run-session -- /usr/bin/cage -s -- nice -n 10 env LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=4 GSK_RENDERER=cairo WEBKIT_SKIA_ENABLE_CPU_RENDERING=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 /usr/bin/python3 /home/$_user/launcher/dumpling-shell.py"
+command_user="$_user:$_user"
+output_log=/var/log/dumpling-launcher.log
+error_log=/var/log/dumpling-launcher.log
+respawn_delay=5
+respawn_max=5
+depend() { need seatd localmount; after networkmanager chronyd; }
+start_pre() {
+	for g in seat video input audio; do addgroup "$_user" "$g" 2>/dev/null || true; done
+	rm -rf "$_run"; install -d -m 0700 -o "$_user" -g "$_user" "$_run"
+	install -m 0644 -o "$_user" -g "$_user" /dev/null /var/log/dumpling-launcher.log
+}
+stop_post() {
+	pkill -x cage 2>/dev/null; pkill -f "[d]umpling-shell" 2>/dev/null
+	sleep 2
+	pkill -9 -x cage 2>/dev/null; pkill -9 -f "[d]umpling-shell" 2>/dev/null; true
+}
