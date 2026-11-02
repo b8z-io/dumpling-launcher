@@ -150,7 +150,7 @@ body { background: var(--void); color: var(--ink); font-family: var(--f-body); o
   </div>
 
   <aside id="notes">
-    <h1>Dumpling Launcher<small>Home screen prototype for the OnePlus 5T running postmarketOS. The same file runs full screen on the phone.</small></h1>
+    <h1>Dumpling Launcher<small>Home screen for the OnePlus 5T running LineageOS, as an Android home app. The same file runs full screen on the phone.</small></h1>
     <div>
       <h3>How it works</h3>
       <ol>
@@ -290,25 +290,34 @@ void main() {
 
 <script>
 // ---------------------------------------------------------------------------------------------- settings
-// Edit this block on the phone (~/launcher/index.html). url: a web app opened full screen by the phone's
-// shell. exec: a native app the shell starts. builtin: drawn by this page.
+// Edit this block, then rebuild and install (android/deploy.sh), or try it live (android/deploy.sh live).
+// url: a web app the phone's shell opens full screen. android: an Android app's package name ("settings" is
+// the system Settings). exec: a native program started by the postmarketOS shell. builtin: drawn by this page.
+// only: "android" or "linux" keeps an entry to one of the two shells.
+// The page runs in three places: #android in the LineageOS home app (android/), #kiosk in the parked
+// postmarketOS shell (launcher/dumpling-shell.py), and with no hash as a preview in a desktop browser.
+const ANDROID = location.hash === "#android" || !!window.dumplingShell;
+const KIOSK = ANDROID || location.hash === "#kiosk";
 const CONFIG = {
   renderScale: 0.6,     // wallpaper resolution vs the screen; the Adreno 540 needs headroom
   fps: 30,              // cap, to keep the phone cool on the charger
   soft: { renderScale: 0.28, fps: 24 },   // used instead when the wallpaper is drawn in software (no GPU)
   video: "jellyfish-loop.mp4",            // with no GPU, play this pre-rendered loop instead (falls back to the shader if missing)
-  forceVideo: location.hash === "#kiosk", // on the phone: WebKit hides the real GPU name, so software drawing can't be detected
+  forceVideo: location.hash === "#kiosk", // postmarketOS: WebKit hides the real GPU name, so software drawing can't be detected
   orbTimeoutMs: 4500,   // the orb fades if nothing happens
   seed: 0,
   apps: [
     { name: "Home Assistant", icon: "home",  url: "http://192.168.68.23:8123" },
+    { name: "Telescope",      icon: "scope", android: "com.telescope", only: "android" },
     { name: "Uptime Kuma",    icon: "pulse", url: "" },
     { name: "Homarr",         icon: "grid",  url: "" },
     { name: "Immich",         icon: "photo", url: "" },
     { name: "Clock",          icon: "clock", builtin: "clock" },
-    { name: "Terminal",       icon: "term",  exec: "foot" },
+    { name: "Settings",       icon: "gear",  android: "settings", only: "android" },
+    { name: "Terminal",       icon: "term",  exec: "foot", only: "linux" },
   ],
 };
+CONFIG.apps = CONFIG.apps.filter((a) => !a.only || a.only === (location.hash === "#kiosk" ? "linux" : "android"));
 
 const ICONS = {
   home:  '<path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/><path d="M10 19v-5h4v5"/>',
@@ -317,14 +326,18 @@ const ICONS = {
   photo: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><circle cx="9" cy="10.5" r="1.8"/><path d="m20.5 16-5-5-8 8"/>',
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   term:  '<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="m7.5 10 3 2.5-3 2.5"/><path d="M13 15.5h4"/>',
+  scope: '<path d="m3.5 13.5 11-6 2.2 4-11 6z"/><path d="m14.5 7.5 3.3-1.8 2.2 4-3.3 1.8"/><path d="m10 15.2-2.5 5.3M11.6 14.3l2.9 6.2"/>',
+  gear:  '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6"/><circle cx="12" cy="12" r="6.3"/>',
 };
 const svg = (k) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[k] || ICONS.grid}</svg>`;
 
 const $ = (s) => document.querySelector(s);
-if (location.hash === "#kiosk") document.documentElement.classList.add("kiosk");
+if (KIOSK) document.documentElement.classList.add("kiosk");
 const screenEl = $("#screen"), cv = $("#wall"), ui = $("#ui"), orb = $("#orb"), ring = $("#ring");
 const trail = $("#trail"), trailLine = $("#trailLine"), app = $("#app"), appBody = $("#appBody"), hint = $("#hint");
-const shell = window.webkit?.messageHandlers?.shell;   // present only inside the phone's kiosk shell
+// present only inside one of the phone's shells: WebKit's message handler (postmarketOS) or the Android
+// home app's JavaScript interface; both take a JSON string through postMessage()
+const shell = window.webkit?.messageHandlers?.shell || window.dumplingShell;
 
 // ---------------------------------------------------------------------------------------------- wallpaper
 const T0 = performance.now() - 40000;                // start 40 s in, so the bell is already moving
@@ -360,6 +373,10 @@ function fail(msg) {
 }
 let glOK = false;
 try { if (!gl) throw new Error("This browser did not provide it."); initGL(); glOK = true; } catch (e) { fail(e.message); }
+// a home screen runs for days: Android can take the GPU context away (memory pressure, long in the
+// background); keep the canvas and rebuild the program when it comes back
+cv.addEventListener("webglcontextlost", (e) => { e.preventDefault(); console.log("WALLPAPER GL context lost"); });
+cv.addEventListener("webglcontextrestored", () => { try { initGL(); console.log("WALLPAPER GL context restored"); } catch (e) { console.log("WALLPAPER GL restore failed:", e.message); } });
 
 function resize() {
   const r = screenEl.getBoundingClientRect();
@@ -392,7 +409,7 @@ let statN = 0;
 function stats() {
   const line = `wallpaper ${cv.width}×${cv.height} px · ${fpsShown} fps (cap ${CONFIG.fps})`;
   const s = $("#stats"); if (s) s.textContent = line;
-  if (location.hash === "#kiosk" && ++statN % 10 === 0) console.log("FPS", line);   // into the phone's launcher log
+  if (KIOSK && ++statN % 10 === 0) console.log("FPS", line);   // into the phone's launcher log (logcat on Android)
 }
 if (glOK) requestAnimationFrame(frame);
 
@@ -430,6 +447,7 @@ const list = $("#appList");
 CONFIG.apps.forEach((a) => {
   const li = document.createElement("li");
   const where = a.url ? `<span class="url">${a.url}</span>` : a.exec ? `<span class="url">runs ${a.exec}</span>`
+    : a.android ? `<span class="url">${a.android === "settings" ? "Android Settings" : "app " + a.android}</span>`
     : a.builtin ? `<span class="url">built in</span>` : `<span class="url todo">address to add</span>`;
   li.innerHTML = `<b>${a.name}</b> ${where}`; list.appendChild(li);
 });
@@ -468,7 +486,10 @@ function launch(i) {
   const a = CONFIG.apps[i], p = petalPos(i);
   ripple(p.x, p.y);
   hideOrb();
-  if (shell && (a.url || a.exec)) { shell.postMessage(JSON.stringify(a.exec ? { exec: a.exec } : { open: a.url })); return; }
+  if (shell && (a.url || a.exec || a.android)) {
+    shell.postMessage(JSON.stringify(a.android ? { android: a.android, name: a.name } : a.exec ? { exec: a.exec } : { open: a.url }));
+    return;
+  }
   openApp(a, p);
 }
 
@@ -483,7 +504,8 @@ function openApp(a, from) {
       $("#clockDate").textContent = d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }); };
     tick(); clockTick = setInterval(tick, 1000);
   } else {
-    const what = a.exec ? `On the phone this starts <code>${a.exec}</code> full screen. Close it to come back.`
+    const what = a.android ? `On the phone this opens ${a.android === "settings" ? "Android's Settings" : `the app <code>${a.android}</code>`}. Swipe up or press Home to come back.`
+      : a.exec ? `On the phone this starts <code>${a.exec}</code> full screen. Close it to come back.`
       : a.url ? `On the phone this opens <code>${a.url}</code> full screen.`
       : `On the phone this will open ${a.name} full screen. Add its address to the apps list at the top of index.html.`;
     appBody.innerHTML = `<div class="big">${svg(a.icon)}</div><h2>${a.name}</h2><p>${what}</p>`;
@@ -492,7 +514,9 @@ function openApp(a, from) {
   S.mode = "app"; app.classList.add("on");
 }
 function goHome() { clearInterval(clockTick); app.classList.remove("on"); S.mode = "idle"; }
-window.launcher = { home: goHome };   // the kiosk shell calls this when it brings the wallpaper back
+// the phone's shell calls this when it brings the wallpaper back (Home, Back, the swipe up): close
+// whatever was open, the ring as well
+window.launcher = { home: () => { goHome(); S.drag = null; S.down = null; hideOrb(); } };
 
 // ---------------------------------------------------------------------------------------------- input
 // One set of handlers fed by pointer events (desktop browsers) or touch events (WebKit on the phone sends

@@ -1,0 +1,46 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace = "io.b8z.dumpling"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "io.b8z.dumpling"
+        minSdk = 30         // Android 11; the phone runs LineageOS 22.2 (Android 15, API 35)
+        targetSdk = 35
+        versionCode = 1
+        versionName = "0.1"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = false
+            // no release keystore yet: sign with the debug key so `assembleRelease` still installs
+            signingConfig = signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // The launcher page is the one in ../../launcher, not a copy: the APK picks it up at build time
+    // and serves it from https://appassets.androidplatform.net/assets/.
+    sourceSets {
+        main {
+            assets.srcDir(rootProject.file("../launcher"))
+        }
+    }
+    androidResources {
+        // the defaults, plus: leave the postmarketOS shell out of the APK
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.py:!__pycache__"
+        noCompress += "mp4"
+    }
+}
+
+dependencies {
+    implementation "androidx.webkit:webkit:1.18.0"
+}

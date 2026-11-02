@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="wall_void">#FF04060C</color>
+
+    <!-- Dark, edge to edge, no action bar; the page paints everything. The window background matches
+         the page's, so there is no white flash while the WebView starts. -->
+    <style name="Dumpling" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/wall_void</item>
+        <item name="android:colorBackground">@color/wall_void</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+</resources>

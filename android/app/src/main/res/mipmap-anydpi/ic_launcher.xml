@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The orb: an ember core with a ring, on the blue-black of the wallpaper -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/wall_void" />
+    <foreground android:drawable="@drawable/ic_orb" />
+    <monochrome android:drawable="@drawable/ic_orb" />
+</adaptive-icon>
