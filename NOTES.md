@@ -103,6 +103,7 @@ Any client that draws with the GPU wedges the msm display driver: WebKit, GTK's 
 The launcher now runs as an Android home app; see [android/README.md](android/README.md). What's settled so far:
 
 - **Telescope** is package `com.telescope` (minSdk 26); its latest APK is always at `github.com/LunarKittyy/Telescope/releases/latest/download/Telescope.apk`, which `deploy.sh` installs.
+- **Network:** Android uses the hardware Wi‑Fi MAC here (Settings › Wi‑Fi › Privacy › Use device MAC); the OPNsense reservation is now **192.168.68.195** (`.191` was the pinned postmarketOS MAC). adb works over USB regardless; another adb device on the Mac (`Ucamera001`) means passing `ANDROID_SERIAL=8e6e7236`.
 - **No app drawer**, so Settings is on the ring; `./deploy.sh restore` hands the home screen back to Trebuchet if anything goes wrong.
 - **The page needed little change:** `#android` gives the kiosk layout without forcing the video (the GPU should draw the shader live; the page still falls back to the video if WebGL reports SwiftShader), and `window.dumplingShell.postMessage()` mirrors the postmarketOS shell's message handler.
 - The build was checked off the phone (APK builds; the page's ring, bridge messages and Home were driven in headless Chrome). **Still to see on the phone:** the shader's frame rate on the Adreno 540 (`./deploy.sh logs`, look for `FPS`; lower `renderScale` if it struggles) and the swipe-up strip next to LineageOS's own gesture bar.
