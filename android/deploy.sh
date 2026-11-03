@@ -74,15 +74,22 @@ setup_adb() {
 }
 
 phone() {
-  local n
-  n=$("$ADB" devices | awk 'NR>1 && $2=="device"' | wc -l | tr -d ' ')
-  if [[ "$n" == 0 ]]; then
-    if "$ADB" devices | grep -q unauthorized; then
-      die "The phone hasn't allowed this Mac yet: unlock it and accept the USB debugging prompt"
-    fi
-    die "No phone over adb. Plug it in; on the phone: Settings › System › Developer options › USB debugging"
+  local list n state
+  list=$("$ADB" devices | awk 'NR>1 && NF>=2 {print $1, $2}')
+  if [[ -z "${ANDROID_SERIAL:-}" ]]; then
+    # one phone and nothing else that's online: use it (other gadgets that show up offline are ignored)
+    n=$(awk '$2=="device"' <<<"$list" | wc -l | tr -d ' ')
+    if [[ "$n" == 1 ]]; then export ANDROID_SERIAL; ANDROID_SERIAL=$(awk '$2=="device"{print $1}' <<<"$list"); fi
+    [[ "$n" -le 1 ]] || die "More than one adb device; run with ANDROID_SERIAL=<serial> (see: $ADB devices -l)"
   fi
-  [[ "$n" == 1 ]] || die "More than one adb device; unplug the others or set ANDROID_SERIAL"
+  state=$(awk -v s="${ANDROID_SERIAL:-}" '$1==s{print $2}' <<<"$list")
+  case "$state" in
+    device) ;;
+    unauthorized) die "The phone hasn't allowed this Mac yet: unlock it and accept the USB debugging prompt" ;;
+    sideload|recovery) die "The phone is in recovery; reboot it into Android first" ;;
+    *) printf 'adb sees:\n%s\n' "${list:-  (nothing)}" >&2
+       die "No phone over adb. Plug it in; on the phone: Settings › About phone › tap Build number 7 times, then Settings › System › Developer options › USB debugging" ;;
+  esac
   say "Phone: $("$ADB" shell getprop ro.product.model | tr -d '\r') ($("$ADB" shell getprop ro.lineage.device | tr -d '\r')), Android $("$ADB" shell getprop ro.build.version.release | tr -d '\r')"
 }
 
